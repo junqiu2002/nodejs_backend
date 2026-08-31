@@ -37,17 +37,27 @@ app.get('/api/transit/route545', async (req, res) => {
     if (response.data?.data?.list) {
       const activeTrips = response.data.data.list;
 
+      // Create a map from references.trips to look up directionId by tripId
+      const referenceTrips = response.data.data.references?.trips || [];
+      const directionLookup = new Map(referenceTrips.map(t => [t.id, t.directionId]));
+
       const formattedVehicles = activeTrips
         .filter(trip => trip.status && trip.status.lastKnownLocation)
-        .map(trip => ({
-          vehicleId: trip.status.vehicleId || `BUS-${trip.status.activeTripId}`,
-          location: {
-            lat: trip.status.lastKnownLocation.lat,
-            lon: trip.status.lastKnownLocation.lon
-          },
-          status: trip.status.phase || 'In Transit',
-          tripId: trip.status.activeTripId
-        }));
+        .map(trip => {
+          const targetTripId = trip.tripId || trip.status.activeTripId;
+          const dirId = directionLookup.get(targetTripId) || "0"; // Defaults to "0" if missing
+
+          return {
+            vehicleId: trip.status.vehicleId || `BUS-${targetTripId}`,
+            location: {
+              lat: trip.status.lastKnownLocation.lat,
+              lon: trip.status.lastKnownLocation.lon
+            },
+            status: trip.status.phase || 'In Transit',
+            tripId: targetTripId,
+            direction: dirId // Safely returns "0" or "1" from references
+          };
+        });
 
       // Save into cache
       cachedData = formattedVehicles;
@@ -73,4 +83,3 @@ app.get('/api/transit/route545', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Backend transit server running safely on port ${PORT}`);
 });
-
